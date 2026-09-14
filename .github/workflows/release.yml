@@ -12,6 +12,9 @@ jobs:
   version-and-publish:
     if: ${{ !contains(github.event.head_commit.message, '#skip-version') }}
     runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      digest: ${{ steps.build.outputs.digest }}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -69,10 +72,12 @@ jobs:
         run: echo "name=ghcr.io/$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "${GITHUB_OUTPUT}"
 
       - name: Build and push
+        id: build
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
+          platforms: linux/amd64
           build-args: |
             VERSION=${{ steps.version.outputs.version }}
           tags: |
@@ -85,3 +90,15 @@ jobs:
             org.opencontainers.image.version=${{ steps.version.outputs.version }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+
+  # Public repo 無法呼叫 private k3s-homelab reusable workflow → 用 vendored 副本
+  deploy-k3s:
+    needs: version-and-publish
+    uses: ./.github/workflows/update-k3s-manifest.yaml
+    with:
+      manifest_path: apps/diy/tgbot-voxcpm/resources.yaml
+      image: ghcr.io/wongkino/tgbot_voxcpm
+      tag: ${{ needs.version-and-publish.outputs.version }}
+      digest: ${{ needs.version-and-publish.outputs.digest }}
+    secrets:
+      token: ${{ secrets.K3S_HOMELAB_PAT }}

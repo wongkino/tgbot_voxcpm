@@ -94,6 +94,7 @@ docker compose down
 1. 依上一個 git tag 自動打新版本 `x.y.z`（預設加 patch，例如 `0.1.0` → `0.1.1`）
 2. 建置 Docker image
 3. 推到 `ghcr.io/wongkino/tgbot_voxcpm:<版本>` 與 `:latest`
+4. 更新 [k3s-homelab](https://github.com/wongkino/k3s-homelab) 的 `apps/diy/tgbot-voxcpm` manifest（需 repo secret `K3S_HOMELAB_PAT`）
 
 在 commit message 裡可指定：
 
