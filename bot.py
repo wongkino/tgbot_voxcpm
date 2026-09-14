@@ -37,26 +37,42 @@ logger = logging.getLogger(__name__)
 DATA_DIR = Path(os.getenv("DATA_DIR", "data"))
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
-START_TEXT = """你好，這是 VoxCPM 聲音克隆 Bot。
+START_TEXT = """VoxCPM 聲音克隆 Bot
 
-使用方式：
-1. 傳送語音訊息或音檔作為參考音色（可跳過）
-2. 輸入要唸的文字
-3. Bot 會回傳合成語音
+先選生成方式，再輸入要唸的文字，Bot 會回傳 M4A 音檔。
 
-上次的參考音色會記住，重開 Bot 後仍可直接輸入文字合成。按「清除」才會忘記。
+【使用步驟】
+1. 按下方按鈕選擇一種生成方式（✓ 是目前使用中）
+2. 可控克隆／極致克隆：傳送語音訊息或音檔作為參考音色
+3. 聲音設計／可控克隆：可按「設定風格」描述聲音
+4. 極致克隆：系統會辨識逐字稿，不對就按「修改逐字稿」
+5. 輸入要唸的文字，等待合成（官方站可能排隊）
 
-指令：
-/style 年輕女性，溫柔甜美 — 設定說話風格
-/skip — 不使用參考音，改用預設／風格描述
-/clear — 清除已記住的聲音與風格（不影響進階參數）
-/status — 查看目前設定
-/denoise — 開關參考音降噪
-/cfg 2.0 — CFG 引導強度（1.0–3.0）
-/steps 10 — LocDiT 步數（1–50）
-/ultimate — 開關極致克隆（參考音 + 逐字稿）
-/transcript — 查看或修改參考音逐字稿
-/cancel — 取消正在進行的辨識或生成
+【三種生成方式】
+聲音設計
+不模仿任何人。用風格描述創造聲音，例如「年輕女性，溫柔甜美」。不用傳參考音。
+
+可控克隆
+上傳參考音來模仿音色，可再加風格控制語氣、語速。
+
+極致克隆
+上傳參考音並提供逐字稿（可自動辨識）。以續寫方式還原原聲細節，不能同時用風格描述。
+
+【下方按鈕】
+聲音設計／可控克隆／極致克隆 — 切換方式
+設定風格 — 描述語氣、性別、語速
+修改逐字稿 — 改正參考音實際說的內容
+狀態 — 查看目前設定與下一步
+進階設定 — 參考音降噪、CFG、步數
+清除 — 忘記參考音、風格與逐字稿（方式與進階參數不變）
+取消任務 — 中止正在進行的辨識或生成
+說明 — 再看一次本說明
+
+【會記住的內容】
+參考音色、逐字稿、風格、生成方式與進階參數會保存，重開 Bot 後仍可用。只有按「清除」才會忘記聲音與風格。
+
+【注意】
+官方示範站可能排隊或限流。轉發到 WhatsApp 請用 Bot 回傳的音檔，不要用語音泡泡。
 """
 
 voxcpm = VoxCPMClient(download_dir=str(DATA_DIR / "generated"))
@@ -64,11 +80,25 @@ voxcpm = VoxCPMClient(download_dir=str(DATA_DIR / "generated"))
 DEFAULT_CFG = 3.0
 DEFAULT_STEPS = 30
 DEFAULT_DENOISE = True
-DEFAULT_ULTIMATE = True
+MODE_DESIGN = "design"
+MODE_CLONE = "clone"
+MODE_ULTIMATE = "ultimate"
+DEFAULT_MODE = MODE_ULTIMATE
 CFG_MIN, CFG_MAX = 1.0, 3.0
 STEPS_MIN, STEPS_MAX = 1, 50
 TELEGRAM_TEXT_LIMIT = 4096
 TELEGRAM_CAPTION_LIMIT = 1024
+
+MODE_LABELS = {
+    MODE_DESIGN: "聲音設計",
+    MODE_CLONE: "可控克隆",
+    MODE_ULTIMATE: "極致克隆",
+}
+MODE_HINTS = {
+    MODE_DESIGN: "不使用參考音，用風格描述創造聲音。",
+    MODE_CLONE: "用參考音克隆音色，可再加風格描述。",
+    MODE_ULTIMATE: "用參考音 + 逐字稿還原原聲細節，風格描述會停用。",
+}
 
 ON_VALUES = {"on", "1", "true", "開", "开"}
 OFF_VALUES = {"off", "0", "false", "關", "关"}
@@ -84,15 +114,34 @@ AUDIO_SUFFIX_BY_MIME = {
 
 BTN_STATUS = "狀態"
 BTN_CLEAR = "清除"
-BTN_SKIP = "跳過參考音"
 BTN_STYLE = "設定風格"
 BTN_SETTINGS = "進階設定"
 BTN_HELP = "說明"
 BTN_BACK = "返回"
 BTN_DENOISE = "參考音降噪"
-BTN_ULTIMATE = "極致克隆"
 BTN_TRANSCRIPT = "修改逐字稿"
 BTN_CANCEL = "取消任務"
+BTN_MODE_DESIGN = "聲音設計"
+BTN_MODE_CLONE = "可控克隆"
+BTN_MODE_ULTIMATE = "極致克隆"
+
+MODE_BUTTONS = {
+    BTN_MODE_DESIGN: MODE_DESIGN,
+    BTN_MODE_CLONE: MODE_CLONE,
+    BTN_MODE_ULTIMATE: MODE_ULTIMATE,
+}
+MODE_ALIASES = {
+    "design": MODE_DESIGN,
+    "voice": MODE_DESIGN,
+    "聲音設計": MODE_DESIGN,
+    "1": MODE_DESIGN,
+    "clone": MODE_CLONE,
+    "可控克隆": MODE_CLONE,
+    "2": MODE_CLONE,
+    "ultimate": MODE_ULTIMATE,
+    "極致克隆": MODE_ULTIMATE,
+    "3": MODE_ULTIMATE,
+}
 
 CFG_PRESETS = {"CFG 1.5": 1.5, "CFG 2.0": 2.0, "CFG 2.5": 2.5, "CFG 3": 3.0, "CFG 3.0": 3.0}
 STEPS_PRESETS = {f"步數 {n}": n for n in (10, 20, 30, 40, 50)}
@@ -100,59 +149,72 @@ STEPS_PRESETS = {f"步數 {n}": n for n in (10, 20, 30, 40, 50)}
 STATE_DEFAULTS: dict[str, Any] = {
     "ref_path": None,
     "style": "",
-    "skip": False,
+    "mode": DEFAULT_MODE,
     "awaiting_style": False,
     "awaiting_transcript": False,
     "in_settings": False,
     "denoise": DEFAULT_DENOISE,
     "cfg_value": DEFAULT_CFG,
     "dit_steps": DEFAULT_STEPS,
-    "ultimate": DEFAULT_ULTIMATE,
     "prompt_text": "",
 }
 PERSIST_KEYS = (
     "ref_path",
     "style",
-    "skip",
+    "mode",
     "denoise",
     "cfg_value",
     "dit_steps",
-    "ultimate",
     "prompt_text",
 )
 
 
-def _markup(rows: list[list[str]]) -> ReplyKeyboardMarkup:
+def _markup(rows: list[list[str]], placeholder: str = "輸入要唸的文字") -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         [[KeyboardButton(label) for label in row] for row in rows],
         resize_keyboard=True,
         is_persistent=True,
+        input_field_placeholder=placeholder,
+    )
+
+
+def _mode_button(mode: str, current: str) -> str:
+    label = MODE_LABELS[mode]
+    return f"✓ {label}" if mode == current else label
+
+
+def _parse_mode_button(text: str) -> str | None:
+    cleaned = text.replace("✓", "").strip()
+    return MODE_BUTTONS.get(cleaned) or MODE_ALIASES.get(cleaned) or MODE_ALIASES.get(cleaned.lower())
+
+
+def _active_keyboard(state: dict[str, Any]) -> ReplyKeyboardMarkup:
+    if state.get("in_settings"):
+        return _markup(
+            [
+                [BTN_DENOISE],
+                ["CFG 1.5", "CFG 2.0"],
+                ["CFG 2.5", "CFG 3"],
+                ["步數 10", "步數 20", "步數 30"],
+                ["步數 40", "步數 50"],
+                [BTN_BACK],
+            ],
+            "調整降噪、CFG 或步數",
+        )
+    current = _mode(state)
+    action = [BTN_TRANSCRIPT] if current == MODE_ULTIMATE else [BTN_STYLE]
+    return _markup(
+        [
+            [_mode_button(MODE_DESIGN, current), _mode_button(MODE_CLONE, current), _mode_button(MODE_ULTIMATE, current)],
+            action + [BTN_STATUS],
+            [BTN_SETTINGS, BTN_CLEAR],
+            [BTN_HELP, BTN_CANCEL],
+        ]
     )
 
 
 def command_keyboard() -> ReplyKeyboardMarkup:
-    return _markup(
-        [
-            [BTN_STATUS, BTN_CLEAR],
-            [BTN_SKIP, BTN_STYLE],
-            [BTN_SETTINGS, BTN_HELP],
-            [BTN_CANCEL],
-        ]
-    )
-
-
-def settings_keyboard() -> ReplyKeyboardMarkup:
-    return _markup(
-        [
-            [BTN_ULTIMATE, BTN_TRANSCRIPT],
-            [BTN_DENOISE],
-            ["CFG 1.5", "CFG 2.0"],
-            ["CFG 2.5", "CFG 3"],
-            ["步數 10", "步數 20", "步數 30"],
-            ["步數 40", "步數 50"],
-            [BTN_BACK],
-        ]
-    )
+    return _active_keyboard({"mode": DEFAULT_MODE, "in_settings": False})
 
 
 def _user_dir(user_id: int) -> Path:
@@ -176,7 +238,8 @@ def _load_persisted(user_id: int) -> dict[str, Any]:
         return {}
     if not isinstance(data, dict):
         return {}
-    return {key: data[key] for key in PERSIST_KEYS if key in data}
+    keep = set(PERSIST_KEYS) | {"skip", "ultimate"}
+    return {key: data[key] for key in keep if key in data}
 
 
 def _restore_ref(user_id: int, state: dict[str, Any]) -> None:
@@ -208,16 +271,40 @@ def _state(context: ContextTypes.DEFAULT_TYPE) -> dict[str, Any]:
         _restore_ref(user_id, state)
     for key, value in STATE_DEFAULTS.items():
         state.setdefault(key, value)
+    _migrate_mode(state)
     return state
 
 
+def _migrate_mode(state: dict[str, Any]) -> None:
+    if state.get("mode") in MODE_LABELS:
+        return
+    if state.get("skip"):
+        state["mode"] = MODE_DESIGN
+    elif state.get("ultimate") is False:
+        state["mode"] = MODE_CLONE
+    else:
+        state["mode"] = DEFAULT_MODE
+
+
+def _mode(state: dict[str, Any]) -> str:
+    mode = state.get("mode")
+    return mode if mode in MODE_LABELS else DEFAULT_MODE
+
+
+def _mode_label(state: dict[str, Any]) -> str:
+    return MODE_LABELS[_mode(state)]
+
+
+def _has_ref(state: dict[str, Any]) -> bool:
+    return bool(state.get("ref_path") and Path(state["ref_path"]).exists())
+
+
 def _ref_status(state: dict[str, Any]) -> str:
-    has_ref = bool(state.get("ref_path") and Path(state["ref_path"]).exists())
-    if has_ref and state["skip"]:
-        return "已記住（目前跳過使用）"
-    if has_ref:
-        return "已記住"
-    return "未使用"
+    if not _has_ref(state):
+        return "未使用"
+    if _mode(state) == MODE_DESIGN:
+        return "已記住（聲音設計中未使用）"
+    return "已記住"
 
 
 def _on_off(flag: bool) -> str:
@@ -279,7 +366,9 @@ def _clear_pending(state: dict[str, Any]) -> None:
 
 def _params_text(state: dict[str, Any]) -> str:
     return (
-        f"極致克隆：{_on_off(state['ultimate'])}\n"
+        f"生成方式：{_mode_label(state)}\n"
+        f"參考音色：{_ref_status(state)}\n"
+        f"風格：{state['style'] or '未設定'}\n"
         f"參考音逐字稿：{state['prompt_text'] or '尚未辨識／輸入'}\n"
         f"參考音降噪：{_on_off(state['denoise'])}\n"
         f"CFG：{state['cfg_value']}\n"
@@ -287,8 +376,25 @@ def _params_text(state: dict[str, Any]) -> str:
     )
 
 
+def _next_hint(state: dict[str, Any]) -> str:
+    mode = _mode(state)
+    if mode == MODE_DESIGN:
+        if not state["style"]:
+            return "下一步：按「設定風格」，再輸入要唸的文字。"
+        return "下一步：直接輸入要唸的文字。"
+    if not _has_ref(state):
+        return "下一步：傳送語音訊息或音檔作為參考音色。"
+    if mode == MODE_ULTIMATE and not state["prompt_text"]:
+        return "下一步：按「修改逐字稿」，或重新上傳語音讓系統辨識。"
+    if mode == MODE_CLONE and not state["style"]:
+        return "下一步：可按「設定風格」，或直接輸入要唸的文字。"
+    return "下一步：直接輸入要唸的文字。"
+
+
 def _ref_path(state: dict[str, Any]) -> str | None:
-    if state["skip"]:
+    if _mode(state) == MODE_DESIGN:
+        return None
+    if not _has_ref(state):
         return None
     return state["ref_path"]
 
@@ -305,9 +411,12 @@ async def _reply(
     state = _state(context)
     if settings is not None:
         state["in_settings"] = settings
-    keyboard = settings_keyboard() if state["in_settings"] else command_keyboard()
+    keyboard = _active_keyboard(state)
     _save_state(state)
-    await update.message.reply_text(_truncate(text, TELEGRAM_TEXT_LIMIT), reply_markup=keyboard)
+    await update.message.reply_text(
+        _truncate(text, TELEGRAM_TEXT_LIMIT),
+        reply_markup=keyboard,
+    )
 
 
 async def _safe_delete(message: Message | None) -> None:
@@ -326,18 +435,19 @@ async def _run_job(update: Update, pending: str, fn: Callable, *args, fail_suffi
     job = UserJob(cancel_event=threading.Event())
     _user_jobs[user_id] = job
     kwargs.setdefault("cancel_event", job.cancel_event)
-    status = await update.message.reply_text(pending)
+    keyboard = _active_keyboard(_state(context))
+    status = await update.message.reply_text(pending, reply_markup=keyboard)
     try:
         result = await asyncio.to_thread(fn, *args, **kwargs)
     except VoxCPMCancelled:
-        await status.edit_text("已取消上一個任務。")
+        await status.edit_text("已取消上一個任務。", reply_markup=keyboard)
         return None
     except VoxCPMError as exc:
-        await status.edit_text(f"{exc}{fail_suffix}")
+        await status.edit_text(f"{exc}{fail_suffix}", reply_markup=keyboard)
         return None
     except Exception as exc:
         logger.exception("Background job failed")
-        await status.edit_text(f"操作失敗：{exc}{fail_suffix}")
+        await status.edit_text(f"操作失敗：{exc}{fail_suffix}", reply_markup=keyboard)
         return None
     finally:
         _user_jobs.pop(user_id, None)
@@ -346,10 +456,12 @@ async def _run_job(update: Update, pending: str, fn: Callable, *args, fail_suffi
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    state = _state(context)
+    _clear_pending(state)
     user_id = update.effective_user.id if update.effective_user else 0
     job = _user_jobs.get(user_id)
     if job is None:
-        await _reply(update, context, "目前沒有進行中的任務。")
+        await _reply(update, context, f"目前沒有進行中的任務。\n{_next_hint(state)}")
         return
     job.cancel_event.set()
     voxcpm.reset()
@@ -358,20 +470,13 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     state = _state(context)
-    extra = ""
-    if state.get("ref_path") and Path(state["ref_path"]).exists():
-        extra = (
-            "\n\n已記住上次的參考音色，但目前設為跳過。再按一次「跳過參考音」可恢復使用。"
-            if state["skip"]
-            else "\n\n已記住上次的參考音色，直接輸入文字即可合成。"
-        )
+    extra = f"\n【目前】\n{_params_text(state)}\n{_next_hint(state)}"
     await _reply(update, context, START_TEXT + extra, settings=False)
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     state = _state(context)
-    style = "極致克隆中已停用" if state["ultimate"] else (state["style"] or "未設定")
-    await _reply(update, context, f"參考音色：{_ref_status(state)}\n風格：{style}\n{_params_text(state)}")
+    await _reply(update, context, f"{_params_text(state)}\n{_next_hint(state)}")
 
 
 def _forget_ref_file(state: dict[str, Any]) -> None:
@@ -393,46 +498,23 @@ async def clear(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     _forget_ref_file(state)
     state["ref_path"] = None
     state["style"] = ""
-    state["skip"] = False
     state["prompt_text"] = ""
     _clear_pending(state)
     await _reply(
         update,
         context,
-        "已清除參考音色、風格與逐字稿。進階參數（含極致克隆開關）維持不變。",
-        settings=False,
-    )
-
-
-async def skip(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    state = _state(context)
-    _clear_pending(state)
-    has_ref = bool(state.get("ref_path") and Path(state["ref_path"]).exists())
-    if state["skip"]:
-        state["skip"] = False
-        if has_ref:
-            await _reply(update, context, "已改回使用上次記住的參考音色。請輸入要唸的文字。", settings=False)
-        else:
-            await _reply(update, context, "目前沒有已記住的參考音色。請先傳送語音或音檔。", settings=False)
-        return
-    state["skip"] = True
-    kept = "上次的參考音色仍會保留，再按一次「跳過參考音」即可恢復使用。" if has_ref else ""
-    await _reply(
-        update,
-        context,
-        "已改為不使用參考音。接下來輸入文字即可合成。可用「設定風格」描述想要的聲音。"
-        + (f"\n{kept}" if kept else ""),
+        f"已清除參考音色、風格與逐字稿。生成方式仍是{_mode_label(state)}，進階參數維持不變。\n{_next_hint(state)}",
         settings=False,
     )
 
 
 async def style(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     state = _state(context)
-    if state["ultimate"]:
+    if _mode(state) == MODE_ULTIMATE:
         await _reply(
             update,
             context,
-            "極致克隆開啟時會停用風格描述（Control Instruction）。請先關閉極致克隆，或改用「修改逐字稿」。",
+            "極致克隆會停用風格描述。請改選「可控克隆」或「聲音設計」，或按「修改逐字稿」。",
         )
         return
     instruction = _args_text(context)
@@ -441,13 +523,13 @@ async def style(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         await _reply(
             update,
             context,
-            f"目前風格：{state['style'] or '未設定'}\n請直接傳送風格描述，例如：年輕女性，溫柔甜美",
+            f"目前風格：{state['style'] or '未設定'}\n請直接傳送風格描述，例如：年輕女性，溫柔甜美\n{_next_hint(state)}",
             settings=False,
         )
         return
     state["style"] = instruction
     state["awaiting_style"] = False
-    await _reply(update, context, f"已設定風格：{instruction}", settings=False)
+    await _reply(update, context, f"已設定風格：{instruction}\n{_next_hint(state)}", settings=False)
 
 
 async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -455,23 +537,25 @@ async def settings(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     await _reply(
         update,
         context,
-        "進階設定（對應 VoxCPM 官網選項）\n"
-        "極致克隆會用參考音逐字稿做音訊續寫，並停用風格描述。\n"
-        "更高 CFG → 更貼近參考／提示；更多步數 → 可能更細但更慢。\n\n"
-        f"{_params_text(state)}\n\n"
-        "也可輸入：/ultimate、/transcript、/denoise、/cfg 2.0、/steps 10",
+        "進階設定\n"
+        "參考音降噪：克隆前清理參考音雜訊。\n"
+        "CFG 越高越貼近參考／風格；步數越多可能更細但更慢。\n\n"
+        f"{_params_text(state)}\n"
+        f"{_next_hint(state)}\n\n"
+        "也可輸入：/denoise、/cfg 2.0、/steps 30",
         settings=True,
     )
 
 
 async def back_to_main(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-    await _reply(update, context, "已返回主選單。", settings=False)
+    state = _state(context)
+    await _reply(update, context, f"已返回主選單。\n{_next_hint(state)}", settings=False)
 
 
 async def toggle_denoise(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     state = _state(context)
     state["denoise"] = _toggle_flag(state["denoise"], _args_text(context))
-    await _reply(update, context, f"參考音降噪：{_on_off(state['denoise'])}\n{_params_text(state)}")
+    await _reply(update, context, f"參考音降噪：{_on_off(state['denoise'])}\n{_params_text(state)}\n{_next_hint(state)}")
 
 
 async def _set_number(
@@ -534,39 +618,65 @@ async def set_steps(update: Update, context: ContextTypes.DEFAULT_TYPE, value: i
     )
 
 
-async def toggle_ultimate(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def choose_mode(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    raw = _args_text(context)
+    if not raw:
+        state = _state(context)
+        await _reply(
+            update,
+            context,
+            f"目前生成方式：{_mode_label(state)}\n請按下方按鈕，或輸入 /mode 聲音設計、可控克隆、極致克隆。\n{_next_hint(state)}",
+            settings=False,
+        )
+        return
+    mode = _parse_mode_button(raw)
+    if not mode:
+        await _reply(update, context, "請選擇：聲音設計、可控克隆 或 極致克隆。", settings=False)
+        return
+    await apply_mode(update, context, mode)
+
+
+async def apply_mode(update: Update, context: ContextTypes.DEFAULT_TYPE, mode: str) -> None:
     state = _state(context)
-    state["ultimate"] = _toggle_flag(state["ultimate"], _args_text(context))
+    already = _mode(state) == mode
+    state["mode"] = mode
     _clear_pending(state)
 
-    if state["ultimate"] and _ref_path(state) and not state["prompt_text"]:
-        user_id = update.effective_user.id if update.effective_user else 0
-        lock = await _try_user_lock(user_id)
-        if lock is None:
-            await _reply(update, context, "正在處理上一個任務，請稍候。")
-            return
-        try:
-            transcript = await _run_job(
-                update,
-                "正在辨識參考音逐字稿…",
-                voxcpm.transcribe,
-                state["ref_path"],
-                fail_suffix="\n\n已記住參考音色。請按「修改逐字稿」手動輸入後再合成。",
-            )
-            if transcript:
-                state["prompt_text"] = transcript
-        finally:
-            lock.release()
+    extra = MODE_HINTS[mode]
+    if mode == MODE_DESIGN and _has_ref(state):
+        extra += " 已記住的參考音色仍會保留，此模式不會使用。"
+    elif mode == MODE_CLONE:
+        extra += " 請先傳送參考語音。" if not _has_ref(state) else " 將使用已記住的參考音色。"
+    elif mode == MODE_ULTIMATE:
+        extra += " 風格描述會停用。"
+        if not _has_ref(state):
+            extra += " 請先傳送參考語音。"
+        elif not state["prompt_text"]:
+            user_id = update.effective_user.id if update.effective_user else 0
+            lock = await _try_user_lock(user_id)
+            if lock is None:
+                await _reply(update, context, "正在處理上一個任務，請稍候。", settings=False)
+                return
+            try:
+                transcript = await _run_job(
+                    update,
+                    "正在辨識參考音逐字稿…",
+                    voxcpm.transcribe,
+                    state["ref_path"],
+                    fail_suffix="\n\n已記住參考音色。請按「修改逐字稿」手動輸入後再合成。",
+                )
+                if transcript:
+                    state["prompt_text"] = transcript
+            finally:
+                lock.release()
 
-    if not state["ultimate"]:
-        await _reply(update, context, f"已關閉極致克隆，可再使用風格描述。\n\n{_params_text(state)}")
-        return
-    extra = "已開啟極致克隆，風格描述會停用。請先上傳參考音；若逐字稿不準，可按「修改逐字稿」。"
-    if not _ref_path(state):
-        extra = "已開啟極致克隆。請先上傳參考語音，系統會自動辨識逐字稿。"
-    elif state["prompt_text"]:
-        extra = f"已開啟極致克隆。\n逐字稿：{state['prompt_text']}"
-    await _reply(update, context, f"{extra}\n\n{_params_text(state)}")
+    prefix = f"目前已是{_mode_label(state)}。" if already else f"已切換為{_mode_label(state)}。"
+    await _reply(
+        update,
+        context,
+        f"{prefix} {extra}\n\n{_params_text(state)}\n{_next_hint(state)}",
+        settings=False,
+    )
 
 
 async def edit_transcript(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -575,7 +685,7 @@ async def edit_transcript(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if instruction:
         state["prompt_text"] = instruction
         state["awaiting_transcript"] = False
-        await _reply(update, context, f"已更新參考音逐字稿：{instruction}")
+        await _reply(update, context, f"已更新參考音逐字稿：{instruction}\n{_next_hint(state)}")
         return
     state["awaiting_transcript"] = True
     state["awaiting_style"] = False
@@ -631,7 +741,6 @@ async def _handle_audio_locked(update: Update, context: ContextTypes.DEFAULT_TYP
     state.update(
         {
             "ref_path": str(dest),
-            "skip": False,
             "prompt_text": "",
             "awaiting_style": False,
             "awaiting_transcript": False,
@@ -639,8 +748,24 @@ async def _handle_audio_locked(update: Update, context: ContextTypes.DEFAULT_TYP
     )
     _save_state(state)
 
-    if not state["ultimate"]:
-        await _reply(update, context, "已記住這段參考音色。請輸入要唸的文字。", settings=False)
+    if _mode(state) == MODE_DESIGN:
+        state["mode"] = MODE_CLONE
+        _save_state(state)
+        await _reply(
+            update,
+            context,
+            "已記住參考音色，並改為可控克隆（聲音設計不會使用參考音）。若要更像原聲，可再按「極致克隆」。\n"
+            f"{_params_text(state)}\n{_next_hint(state)}",
+            settings=False,
+        )
+        return
+    if _mode(state) != MODE_ULTIMATE:
+        await _reply(
+            update,
+            context,
+            f"已記住這段參考音色。\n{_params_text(state)}\n{_next_hint(state)}",
+            settings=False,
+        )
         return
 
     transcript = await _run_job(
@@ -657,17 +782,16 @@ async def _handle_audio_locked(update: Update, context: ContextTypes.DEFAULT_TYP
     await _reply(
         update,
         context,
-        f"已記住參考音色，並辨識逐字稿：\n{transcript}\n\n若不正確請按「修改逐字稿」。接著輸入要唸的文字。",
+        f"已記住參考音色，並辨識逐字稿：\n{transcript}\n\n若不正確請按「修改逐字稿」。\n{_next_hint(state)}",
         settings=False,
     )
 
 
 def _result_caption(state: dict[str, Any], ref_path: str | None, chunks: int = 1) -> str:
-    parts = ["合成完成"]
+    parts = [f"合成完成（{_mode_label(state)}）"]
     if ref_path:
         parts[0] += "（已使用參考音色）"
-    if state["ultimate"]:
-        parts[0] += "（極致克隆）"
+    if _mode(state) == MODE_ULTIMATE:
         if state["prompt_text"]:
             parts.append(f"逐字稿：{state['prompt_text']}")
     elif state["style"]:
@@ -692,6 +816,10 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if shortcut:
         await shortcut(update, context)
         return
+    selected_mode = _parse_mode_button(text)
+    if selected_mode:
+        await apply_mode(update, context, selected_mode)
+        return
     if text in CFG_PRESETS:
         await set_cfg(update, context, CFG_PRESETS[text])
         return
@@ -703,19 +831,20 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     if state["awaiting_transcript"]:
         state["prompt_text"] = text
         state["awaiting_transcript"] = False
-        await _reply(update, context, f"已更新參考音逐字稿：{text}")
+        await _reply(update, context, f"已更新參考音逐字稿：{text}\n{_next_hint(state)}")
         return
     if state["awaiting_style"]:
         state["style"] = text
         state["awaiting_style"] = False
-        await _reply(update, context, f"已設定風格：{text}", settings=False)
+        await _reply(update, context, f"已設定風格：{text}\n{_next_hint(state)}", settings=False)
         return
 
+    mode = _mode(state)
     ref_path = _ref_path(state)
-    if state["ultimate"] and not ref_path:
-        await _reply(update, context, "極致克隆需要參考語音。請先傳送語音或音檔，或先關閉極致克隆。")
+    if mode != MODE_DESIGN and not ref_path:
+        await _reply(update, context, f"{_mode_label(state)}需要參考語音。請先傳送語音或音檔，或改選「聲音設計」。")
         return
-    if state["ultimate"] and not state["prompt_text"]:
+    if mode == MODE_ULTIMATE and not state["prompt_text"]:
         await _reply(update, context, "極致克隆需要參考音逐字稿。請按「修改逐字稿」，或重新上傳語音讓系統辨識。")
         return
 
@@ -737,12 +866,12 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
             text=text,
             user_id=f"tg-{update.effective_user.id}",
             ref_wav=ref_path,
-            control_instruction="" if state["ultimate"] else state["style"],
+            control_instruction="" if mode == MODE_ULTIMATE else state["style"],
             cfg_value=state["cfg_value"],
             dit_steps=state["dit_steps"],
             denoise=state["denoise"],
-            use_prompt_text=bool(state["ultimate"] and ref_path),
-            prompt_text_value=state["prompt_text"] if state["ultimate"] else "",
+            use_prompt_text=mode == MODE_ULTIMATE,
+            prompt_text_value=state["prompt_text"] if mode == MODE_ULTIMATE else "",
         )
         if not audio_path:
             return
@@ -755,7 +884,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
                 caption=_result_caption(state, ref_path, len(chunks)),
                 filename=Path(playback_path).name,
                 duration=max(1, int(round(seconds))) if seconds else None,
-                reply_markup=command_keyboard(),
+                reply_markup=_active_keyboard(state),
             )
         await asyncio.to_thread(cleanup_data_dir, DATA_DIR)
     finally:
@@ -766,12 +895,10 @@ SHORTCUTS = {
     BTN_HELP: start,
     BTN_STATUS: status,
     BTN_CLEAR: clear,
-    BTN_SKIP: skip,
     BTN_STYLE: style,
     BTN_SETTINGS: settings,
     BTN_BACK: back_to_main,
     BTN_DENOISE: toggle_denoise,
-    BTN_ULTIMATE: toggle_ultimate,
     BTN_TRANSCRIPT: edit_transcript,
     BTN_CANCEL: cancel,
 }
@@ -781,28 +908,26 @@ COMMAND_HANDLERS = [
     ("help", start),
     ("status", status),
     ("clear", clear),
-    ("skip", skip),
+    ("mode", choose_mode),
     ("style", style),
     ("denoise", toggle_denoise),
     ("cfg", set_cfg),
     ("steps", set_steps),
     ("settings", settings),
-    ("ultimate", toggle_ultimate),
     ("transcript", edit_transcript),
     ("cancel", cancel),
 ]
 
 BOT_COMMANDS = [
     BotCommand("start", "開始／說明"),
+    BotCommand("mode", "選擇生成方式"),
     BotCommand("style", "設定說話風格"),
-    BotCommand("skip", "不使用參考音"),
     BotCommand("clear", "清除聲音與風格"),
     BotCommand("status", "查看目前設定"),
     BotCommand("denoise", "開關參考音降噪"),
     BotCommand("cfg", "設定 CFG 1.0–3.0"),
     BotCommand("steps", "設定 LocDiT 步數 1–50"),
-    BotCommand("settings", "進階參數選單"),
-    BotCommand("ultimate", "開關極致克隆"),
+    BotCommand("settings", "進階參數與生成方式"),
     BotCommand("transcript", "修改參考音逐字稿"),
     BotCommand("cancel", "取消進行中的任務"),
 ]
