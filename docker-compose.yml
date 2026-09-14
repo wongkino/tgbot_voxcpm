@@ -2,11 +2,12 @@ name: tgbot_voxcpm
 
 services:
   bot:
-    image: ${DOCKER_IMAGE:-tgbot_voxcpm:local}
+    image: ${DOCKER_IMAGE:-ghcr.io/wongkino/tgbot_voxcpm:latest}
     build:
       context: .
       args:
-        VERSION: ${VERSION:-0.0.0}
+        VERSION: ${VERSION:-latest}
+    pull_policy: ${PULL_POLICY:-always}
     env_file:
       - .env
     environment:
