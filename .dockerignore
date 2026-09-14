@@ -1,0 +1,10 @@
+.git
+.env
+data
+__pycache__
+*.pyc
+.venv
+venv
+README.md
+.cursor
+*.plan.md

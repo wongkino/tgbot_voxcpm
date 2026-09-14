@@ -1,0 +1,3 @@
+python-telegram-bot>=21.6
+gradio_client>=1.10.0
+python-dotenv>=1.0.1
