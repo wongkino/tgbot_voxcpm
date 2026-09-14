@@ -13,7 +13,7 @@ from typing import Any, Callable
 
 from dotenv import load_dotenv
 from telegram import BotCommand, KeyboardButton, Message, ReplyKeyboardMarkup, Update
-from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, TypeHandler, filters
 
 from voxcpm_client import (
     VoxCPMCancelled,
@@ -260,6 +260,11 @@ def _save_state(state: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
+async def _bind_user_id(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    if update.effective_user:
+        context._user_id = update.effective_user.id
+
+
 def _state(context: ContextTypes.DEFAULT_TYPE) -> dict[str, Any]:
     state = context.user_data.setdefault("vox", {})
     user_id = getattr(context, "_user_id", None)
@@ -399,6 +404,17 @@ def _ref_path(state: dict[str, Any]) -> str | None:
     return state["ref_path"]
 
 
+async def _on_error(update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.exception("Unhandled handler error", exc_info=context.error)
+    message = update.effective_message if isinstance(update, Update) else None
+    if not message:
+        return
+    try:
+        await message.reply_text("處理訊息時發生錯誤，請再試一次。若持續沒反應請按「取消任務」。")
+    except Exception:
+        logger.debug("Could not send error reply", exc_info=True)
+
+
 async def _reply(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -408,6 +424,8 @@ async def _reply(
 ) -> None:
     if not update.message:
         return
+    if update.effective_user:
+        context._user_id = update.effective_user.id
     state = _state(context)
     if settings is not None:
         state["in_settings"] = settings
@@ -428,26 +446,42 @@ async def _safe_delete(message: Message | None) -> None:
         logger.debug("Could not delete status message", exc_info=True)
 
 
-async def _run_job(update: Update, pending: str, fn: Callable, *args, fail_suffix: str = "", **kwargs) -> Any:
+async def _run_job(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    pending: str,
+    fn: Callable,
+    *args,
+    fail_suffix: str = "",
+    **kwargs,
+) -> Any:
     if not update.message:
         return None
     user_id = update.effective_user.id if update.effective_user else 0
+    if update.effective_user:
+        context._user_id = update.effective_user.id
     job = UserJob(cancel_event=threading.Event())
     _user_jobs[user_id] = job
     kwargs.setdefault("cancel_event", job.cancel_event)
     keyboard = _active_keyboard(_state(context))
-    status = await update.message.reply_text(pending, reply_markup=keyboard)
+    status = None
     try:
+        status = await update.message.reply_text(pending, reply_markup=keyboard)
         result = await asyncio.to_thread(fn, *args, **kwargs)
     except VoxCPMCancelled:
-        await status.edit_text("已取消上一個任務。", reply_markup=keyboard)
+        if status:
+            await status.edit_text("已取消上一個任務。", reply_markup=keyboard)
         return None
     except VoxCPMError as exc:
-        await status.edit_text(f"{exc}{fail_suffix}", reply_markup=keyboard)
+        if status:
+            await status.edit_text(f"{exc}{fail_suffix}", reply_markup=keyboard)
         return None
     except Exception as exc:
         logger.exception("Background job failed")
-        await status.edit_text(f"操作失敗：{exc}{fail_suffix}", reply_markup=keyboard)
+        if status:
+            await status.edit_text(f"操作失敗：{exc}{fail_suffix}", reply_markup=keyboard)
+        else:
+            await update.message.reply_text(f"操作失敗：{exc}{fail_suffix}", reply_markup=keyboard)
         return None
     finally:
         _user_jobs.pop(user_id, None)
@@ -660,6 +694,7 @@ async def apply_mode(update: Update, context: ContextTypes.DEFAULT_TYPE, mode: s
             try:
                 transcript = await _run_job(
                     update,
+                    context,
                     "正在辨識參考音逐字稿…",
                     voxcpm.transcribe,
                     state["ref_path"],
@@ -770,6 +805,7 @@ async def _handle_audio_locked(update: Update, context: ContextTypes.DEFAULT_TYP
 
     transcript = await _run_job(
         update,
+        context,
         "正在辨識參考音逐字稿…",
         voxcpm.transcribe,
         str(dest),
@@ -861,6 +897,7 @@ async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
     try:
         audio_path = await _run_job(
             update,
+            context,
             pending,
             voxcpm.generate,
             text=text,
@@ -944,10 +981,12 @@ def main() -> None:
         logger.info("Startup cleanup removed %s files", removed)
 
     app = Application.builder().token(token).post_init(post_init).build()
+    app.add_handler(TypeHandler(Update, _bind_user_id), group=-1)
     for name, handler in COMMAND_HANDLERS:
         app.add_handler(CommandHandler(name, handler))
     app.add_handler(MessageHandler(filters.VOICE | filters.AUDIO | filters.Document.ALL, handle_audio))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_text))
+    app.add_error_handler(_on_error)
 
     logger.info("Bot polling started")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
