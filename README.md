@@ -69,13 +69,13 @@ docker compose logs -f
 或直接使用 GitHub Container Registry 映像（推送到 `main` 後會自動建置）：
 
 ```bash
-docker pull ghcr.io/<GITHUB_USER>/tgbot_voxcpm:latest
+docker pull ghcr.io/wongkino/tgbot_voxcpm:latest
 ```
 
 `docker-compose.yml` 可用環境變數指定映像：
 
 ```bash
-DOCKER_IMAGE=ghcr.io/<GITHUB_USER>/tgbot_voxcpm:latest docker compose up -d
+DOCKER_IMAGE=ghcr.io/wongkino/tgbot_voxcpm:latest docker compose up -d
 ```
 
 容器用 long polling，不必對外開 port，只要能連 Telegram 與 `voxcpm.modelbest.cn`。
@@ -92,7 +92,7 @@ docker compose down
 
 1. 依上一個 git tag 自動打新版本 `x.y.z`（預設加 patch，例如 `0.1.0` → `0.1.1`）
 2. 建置 Docker image
-3. 推到 `ghcr.io/<GITHUB_USER>/tgbot_voxcpm:<版本>` 與 `:latest`
+3. 推到 `ghcr.io/wongkino/tgbot_voxcpm:<版本>` 與 `:latest`
 
 在 commit message 裡可指定：
 
